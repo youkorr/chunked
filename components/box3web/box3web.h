@@ -9,6 +9,13 @@
 namespace esphome {
 namespace box3web {
 
+// Déclarations forward pour les wrappers
+namespace {
+esp_err_t http_get_handler_wrapper(httpd_req_t *req);
+esp_err_t http_delete_handler_wrapper(httpd_req_t *req);
+esp_err_t http_post_handler_wrapper(httpd_req_t *req);
+}  // namespace
+
 class Path {
  public:
   static const char separator = '/';
@@ -33,6 +40,11 @@ class Box3Web : public Component {
   void set_deletion_enabled(bool allow);
   void set_download_enabled(bool allow);
   void set_upload_enabled(bool allow);
+
+  // Déclarations friend pour les wrappers
+  friend esp_err_t ::http_get_handler_wrapper(httpd_req_t *req);
+  friend esp_err_t ::http_delete_handler_wrapper(httpd_req_t *req);
+  friend esp_err_t ::http_post_handler_wrapper(httpd_req_t *req);
 
  private:
   web_server_base::WebServerBase *base_{nullptr};
