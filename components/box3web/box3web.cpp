@@ -9,12 +9,23 @@ namespace box3web {
 
 static const char *TAG = "box3web";
 
-// Déclaration anticipée des wrappers
-static esp_err_t http_get_handler_wrapper(httpd_req_t *req);
-static esp_err_t http_delete_handler_wrapper(httpd_req_t *req);
-static esp_err_t http_post_handler_wrapper(httpd_req_t *req);
+// Handlers statiques
+esp_err_t Box3Web::http_get_handler(httpd_req_t *req) {
+    Box3Web* instance = static_cast<Box3Web*>(req->user_ctx);
+    return instance->handle_http_get(req);
+}
 
-// Implémentation des méthodes de Path
+esp_err_t Box3Web::http_delete_handler(httpd_req_t *req) {
+    Box3Web* instance = static_cast<Box3Web*>(req->user_ctx);
+    return instance->handle_http_delete(req);
+}
+
+esp_err_t Box3Web::http_post_handler(httpd_req_t *req) {
+    Box3Web* instance = static_cast<Box3Web*>(req->user_ctx);
+    return instance->handle_http_post(req);
+}
+
+// Implémentation Path
 std::string Path::file_name(std::string const &path) {
     size_t pos = path.find_last_of(separator);
     return (pos != std::string::npos) ? path.substr(pos + 1) : path;
@@ -50,7 +61,7 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
     return path;
 }
 
-// Implémentation de Box3Web
+// Implémentation Box3Web
 Box3Web::Box3Web(web_server_base::WebServerBase *base) : base_(base) {}
 
 void Box3Web::setup() {
@@ -83,19 +94,6 @@ void Box3Web::dump_config() {
     ESP_LOGCONFIG(TAG, "  Upload Enabled: %s", upload_enabled_ ? "Yes" : "No");
 }
 
-// Wrappers implémentés comme fonctions friend
-static esp_err_t http_get_handler_wrapper(httpd_req_t *req) {
-    return static_cast<Box3Web*>(req->user_ctx)->handle_http_get(req);
-}
-
-static esp_err_t http_delete_handler_wrapper(httpd_req_t *req) {
-    return static_cast<Box3Web*>(req->user_ctx)->handle_http_delete(req);
-}
-
-static esp_err_t http_post_handler_wrapper(httpd_req_t *req) {
-    return static_cast<Box3Web*>(req->user_ctx)->handle_http_post(req);
-}
-
 void Box3Web::register_handlers() {
     std::string base_uri = build_prefix() + "/*";
 
@@ -103,7 +101,7 @@ void Box3Web::register_handlers() {
     httpd_uri_t get_handler = {
         .uri = base_uri.c_str(),
         .method = HTTP_GET,
-        .handler = http_get_handler_wrapper,
+        .handler = Box3Web::http_get_handler,
         .user_ctx = this
     };
     httpd_register_uri_handler(server_, &get_handler);
@@ -113,7 +111,7 @@ void Box3Web::register_handlers() {
         httpd_uri_t delete_handler = {
             .uri = base_uri.c_str(),
             .method = HTTP_DELETE,
-            .handler = http_delete_handler_wrapper,
+            .handler = Box3Web::http_delete_handler,
             .user_ctx = this
         };
         httpd_register_uri_handler(server_, &delete_handler);
@@ -124,7 +122,7 @@ void Box3Web::register_handlers() {
         httpd_uri_t post_handler = {
             .uri = base_uri.c_str(),
             .method = HTTP_POST,
-            .handler = http_post_handler_wrapper,
+            .handler = Box3Web::http_post_handler,
             .user_ctx = this
         };
         httpd_register_uri_handler(server_, &post_handler);
@@ -253,7 +251,11 @@ esp_err_t Box3Web::handle_http_post(httpd_req_t *req) {
 
     char buffer[2048];
     int received;
-    while ((received = httpd_req_recv(req, buffer, sizeof(buffer))) > 0) {
+    while ((received = httpd_req_recv(req, buffer, sizeof(buffer))) {
+        if (received < 0) {
+            fclose(file);
+            return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Upload failed");
+        }
         fwrite(buffer, 1, received, file);
     }
 
