@@ -43,7 +43,7 @@ class Box3Web : public Component, public AsyncWebHandler {  // Héritage de Comp
   sd_mmc_card::SdMmc *sd_mmc_card_{nullptr};
 
   std::string url_prefix_{"box3web"};
-  std::string root_path_{"/sdcard"};
+  std::string root_path_{"/"};
 
   bool deletion_enabled_{true};
   bool download_enabled_{true};
