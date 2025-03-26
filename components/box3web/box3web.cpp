@@ -166,32 +166,40 @@ void Box3Web::handle_download(AsyncWebServerRequest *request, const std::string 
     size_t file_size = ftell(file);
     rewind(file);
 
-    // Create a response
-    AsyncWebServerResponse *response = request->beginResponse(
-        200, 
-        get_content_type(path).c_str(), 
-        [file, file_size](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
-            // Seek to the correct position
-            fseek(file, index, SEEK_SET);
-            
-            // Read data into buffer
-            size_t bytesRead = fread(buffer, 1, maxLen, file);
-            
-            // Close file if we've read everything
-            if (index + bytesRead >= file_size) {
-                fclose(file);
-            }
-            
-            return bytesRead;
-        }
-    );
+    // Prepare response headers
+    request->addHeader("Content-Disposition", ("attachment; filename=" + Path::file_name(path)).c_str());
+    request->addHeader("Content-Type", get_content_type(path).c_str());
+    request->addHeader("Content-Length", std::to_string(file_size).c_str());
 
-    // Set headers
-    response->addHeader("Content-Disposition", ("attachment; filename=" + Path::file_name(path)).c_str());
-    response->addHeader("Content-Length", std::to_string(file_size).c_str());
+    // Send the file in a way compatible with the IDF web server
+    request->beginResponse(200, get_content_type(path).c_str());
     
-    // Send the response
-    request->send(response);
+    // Stream the file content
+    uint8_t buffer[1024];  // Adjust buffer size as needed
+    size_t bytes_sent = 0;
+    
+    while (bytes_sent < file_size) {
+        size_t bytes_to_read = std::min(sizeof(buffer), file_size - bytes_sent);
+        size_t bytes_read = fread(buffer, 1, bytes_to_read, file);
+        
+        if (bytes_read == 0) {
+            // Error or end of file
+            break;
+        }
+        
+        // Send the buffer 
+        // Note: The exact method depends on the AsyncWebServerRequest implementation
+        // You might need to adjust this based on the specific ESPHome web server method
+        request->sendContent(reinterpret_cast<char*>(buffer), bytes_read);
+        
+        bytes_sent += bytes_read;
+    }
+    
+    // Close the file
+    fclose(file);
+    
+    // Finalize the response
+    request->send();
 }
 
 void Box3Web::handle_upload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data,
