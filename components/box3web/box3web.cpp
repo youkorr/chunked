@@ -9,6 +9,19 @@ namespace box3web {
 
 static const char *TAG = "box3web";
 
+// Wrappers statiques pour les handlers
+static esp_err_t http_get_handler_wrapper(httpd_req_t *req) {
+    return static_cast<Box3Web*>(req->user_ctx)->handle_http_get(req);
+}
+
+static esp_err_t http_delete_handler_wrapper(httpd_req_t *req) {
+    return static_cast<Box3Web*>(req->user_ctx)->handle_http_delete(req);
+}
+
+static esp_err_t http_post_handler_wrapper(httpd_req_t *req) {
+    return static_cast<Box3Web*>(req->user_ctx)->handle_http_post(req);
+}
+
 // Implémentation Path
 std::string Path::file_name(std::string const &path) {
     size_t pos = path.find_last_of(separator);
@@ -69,6 +82,15 @@ void Box3Web::setup() {
     ESP_LOGI(TAG, "HTTP server started with prefix: %s", url_prefix_.c_str());
 }
 
+void Box3Web::dump_config() {
+    ESP_LOGCONFIG(TAG, "Box3Web Configuration:");
+    ESP_LOGCONFIG(TAG, "  URL Prefix: %s", url_prefix_.c_str());
+    ESP_LOGCONFIG(TAG, "  Root Path: %s", root_path_.c_str());
+    ESP_LOGCONFIG(TAG, "  Deletion Enabled: %s", deletion_enabled_ ? "Yes" : "No");
+    ESP_LOGCONFIG(TAG, "  Download Enabled: %s", download_enabled_ ? "Yes" : "No");
+    ESP_LOGCONFIG(TAG, "  Upload Enabled: %s", upload_enabled_ ? "Yes" : "No");
+}
+
 void Box3Web::register_handlers() {
     std::string base_uri = build_prefix() + "/*";
 
@@ -76,9 +98,7 @@ void Box3Web::register_handlers() {
     httpd_uri_t get_handler = {
         .uri = base_uri.c_str(),
         .method = HTTP_GET,
-        .handler = [](httpd_req_t *req) {
-            return static_cast<Box3Web*>(req->user_ctx)->handle_http_get(req);
-        },
+        .handler = http_get_handler_wrapper,
         .user_ctx = this
     };
     httpd_register_uri_handler(server_, &get_handler);
@@ -88,9 +108,7 @@ void Box3Web::register_handlers() {
         httpd_uri_t delete_handler = {
             .uri = base_uri.c_str(),
             .method = HTTP_DELETE,
-            .handler = [](httpd_req_t *req) {
-                return static_cast<Box3Web*>(req->user_ctx)->handle_http_delete(req);
-            },
+            .handler = http_delete_handler_wrapper,
             .user_ctx = this
         };
         httpd_register_uri_handler(server_, &delete_handler);
@@ -101,9 +119,7 @@ void Box3Web::register_handlers() {
         httpd_uri_t post_handler = {
             .uri = base_uri.c_str(),
             .method = HTTP_POST,
-            .handler = [](httpd_req_t *req) {
-                return static_cast<Box3Web*>(req->user_ctx)->handle_http_post(req);
-            },
+            .handler = http_post_handler_wrapper,
             .user_ctx = this
         };
         httpd_register_uri_handler(server_, &post_handler);
@@ -132,11 +148,6 @@ esp_err_t Box3Web::send_file_chunked(httpd_req_t *req, const std::string &path) 
         ESP_LOGE(TAG, "Failed to open file: %s", path.c_str());
         return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File not found");
     }
-
-    // Get file size
-    fseek(file, 0, SEEK_END);
-    size_t file_size = ftell(file);
-    fseek(file, 0, SEEK_SET);
 
     // Set headers
     httpd_resp_set_type(req, get_content_type(path).c_str());
