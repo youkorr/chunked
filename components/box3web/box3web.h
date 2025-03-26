@@ -3,7 +3,8 @@
 #include <string>
 #include "esphome/components/web_server_base/web_server_base.h"
 #include "../sd_mmc_card/sd_mmc_card.h"
-#include "esphome/core/component.h"  // Ajout de Component
+#include "esphome/core/component.h"
+#include "esp_http_server.h"
 
 namespace esphome {
 namespace box3web {
@@ -18,12 +19,12 @@ class Path {
   static std::string remove_root_path(std::string path, std::string const &root);
 };
 
-class Box3Web : public Component, public AsyncWebHandler {  // Héritage de Component
+class Box3Web : public Component {
  public:
-  Box3Web(web_server_base::WebServerBase *base);
+  Box3Web(web_server_base::WebServerBase *base = nullptr);
 
-  void setup() override;  // Méthode obligatoire
-  void dump_config() override;  // Méthode obligatoire
+  void setup() override;
+  void dump_config() override;
 
   void set_url_prefix(std::string const &prefix);
   void set_root_path(std::string const &path);
@@ -33,14 +34,10 @@ class Box3Web : public Component, public AsyncWebHandler {  // Héritage de Comp
   void set_download_enabled(bool allow);
   void set_upload_enabled(bool allow);
 
-  bool canHandle(AsyncWebServerRequest *request) override;
-  void handleRequest(AsyncWebServerRequest *request) override;
-  void handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data,
-                    size_t len, bool final) override;
-
  private:
   web_server_base::WebServerBase *base_{nullptr};
   sd_mmc_card::SdMmc *sd_mmc_card_{nullptr};
+  httpd_handle_t server_{nullptr};
 
   std::string url_prefix_{"box3web"};
   std::string root_path_{"/sdcard"};
@@ -49,19 +46,24 @@ class Box3Web : public Component, public AsyncWebHandler {  // Héritage de Comp
   bool download_enabled_{true};
   bool upload_enabled_{true};
 
-  void handle_get(AsyncWebServerRequest *request) const;
-  void handle_index(AsyncWebServerRequest *request, std::string const &path) const;
-  void handle_download(AsyncWebServerRequest *request, std::string const &path) const;
-  void handle_delete(AsyncWebServerRequest *request);
+  // Handlers ESP HTTP Server
+  static esp_err_t http_get_handler(httpd_req_t *req);
+  static esp_err_t http_delete_handler(httpd_req_t *req);
+  static esp_err_t http_upload_handler(httpd_req_t *req);
 
-  void write_row(AsyncResponseStream *response, sd_mmc_card::FileInfo const &info) const;
-
-  String get_content_type(const std::string &path) const;
+  // Méthodes internes
+  void register_handlers();
   std::string build_prefix() const;
   std::string extract_path_from_url(std::string const &url) const;
   std::string build_absolute_path(std::string relative_path) const;
+  std::string get_content_type(const std::string &path) const;
 
-  const char *component_source_{nullptr};  // Variable pour set_component_source (facultatif)
+  // Gestion des réponses
+  esp_err_t send_directory_listing(httpd_req_t *req, const std::string &path);
+  esp_err_t send_file_chunked(httpd_req_t *req, const std::string &path);
+  esp_err_t handle_upload(httpd_req_t *req);
+
+  const char *component_source_{nullptr};
 };
 
 }  // namespace box3web
