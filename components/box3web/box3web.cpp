@@ -4,6 +4,7 @@
 #include "esphome/core/helpers.h"
 #include "esp_http_server.h"
 #include "esp_ota_ops.h"
+#include <filesystem>
 
 namespace esphome {
 namespace box3web {
@@ -76,7 +77,12 @@ private:
     }
 
     static std::string buildAbsolutePath(const std::string &root_path, const std::string &relative_path) {
-        return Path::join(root_path, relative_path);
+        return root_path + "/" + relative_path;
+    }
+
+    static std::string getParentPath(const std::string &path) {
+        size_t last_slash = path.find_last_of('/');
+        return (last_slash != std::string::npos) ? path.substr(0, last_slash) : "";
     }
 
     static esp_err_t handleGet(httpd_req_t *req) {
@@ -84,6 +90,13 @@ private:
         std::string url = std::string(req->uri);
         std::string relative_path = url.substr(handler->url_prefix_.length());
         std::string absolute_path = buildAbsolutePath(handler->root_path_, relative_path);
+
+        // Check content type header using the correct method
+        char content_type[64];
+        size_t content_type_len = httpd_req_get_hdr_value_len(req, "Content-Type");
+        if (content_type_len > 0) {
+            httpd_req_get_hdr_value_str(req, "Content-Type", content_type, sizeof(content_type));
+        }
 
         // Handle directory listing
         if (handler->sd_mmc_card_->is_directory(absolute_path)) {
@@ -95,8 +108,6 @@ private:
     }
 
     static esp_err_t handleDirectoryListing(httpd_req_t *req, Box3WebHandler *handler, const std::string &path) {
-        // Implement a similar HTML listing as in the previous implementation
-        // Consider using a streaming response for large directories
         httpd_resp_set_type(req, "text/html");
         httpd_resp_set_status(req, "200 OK");
 
@@ -132,38 +143,31 @@ private:
     }
 
     static esp_err_t handleFileDownload(httpd_req_t *req, Box3WebHandler *handler, const std::string &path) {
-        // Read file in chunks to support large files
         FILE *file = fopen(path.c_str(), "rb");
         if (!file) {
             httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open file");
             return ESP_FAIL;
         }
 
-        // Get file size
         fseek(file, 0, SEEK_END);
         size_t file_size = ftell(file);
         fseek(file, 0, SEEK_SET);
 
-        // Set headers
         httpd_resp_set_type(req, getContentType(path).c_str());
         httpd_resp_set_status(req, "200 OK");
         
-        // Enable chunked transfer
         httpd_resp_set_hdr(req, "Transfer-Encoding", "chunked");
 
-        // Optional: Add content disposition for downloads
-        std::string filename = Path::file_name(path);
+        std::string filename = std::filesystem::path(path).filename().string();
         std::string content_disposition = "attachment; filename=\"" + filename + "\"";
         httpd_resp_set_hdr(req, "Content-Disposition", content_disposition.c_str());
 
-        // Stream file in chunks
         std::vector<char> chunk(CHUNK_SIZE);
         size_t bytes_read;
         while ((bytes_read = fread(chunk.data(), 1, chunk.size(), file)) > 0) {
             httpd_resp_send_chunk(req, chunk.data(), bytes_read);
         }
 
-        // End chunked transfer
         httpd_resp_send_chunk(req, nullptr, 0);
 
         fclose(file);
@@ -173,24 +177,20 @@ private:
     static esp_err_t handlePost(httpd_req_t *req) {
         Box3WebHandler *handler = static_cast<Box3WebHandler*>(req->user_ctx);
         
-        // Handle file upload with multipart/form-data support
-        if (strstr(req->content_type, "multipart/form-data") == nullptr) {
-            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Requires multipart/form-data");
-            return ESP_FAIL;
+        // Check content type header 
+        char content_type[64];
+        size_t content_type_len = httpd_req_get_hdr_value_len(req, "Content-Type");
+        if (content_type_len > 0) {
+            httpd_req_get_hdr_value_str(req, "Content-Type", content_type, sizeof(content_type));
+            
+            // Check for multipart/form-data
+            if (strstr(content_type, "multipart/form-data") == nullptr) {
+                httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Requires multipart/form-data");
+                return ESP_FAIL;
+            }
         }
 
-        // Parse multipart form data
-        char boundary[128];
-        esp_err_t err = httpd_req_get_multipart_boundary(req, boundary, sizeof(boundary));
-        if (err != ESP_OK) {
-            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid multipart boundary");
-            return ESP_FAIL;
-        }
-
-        // TODO: Implement full multipart parsing and file upload
-        // This would involve parsing the multipart body, extracting filename, 
-        // and saving file to the specified directory
-
+        // Placeholder for file upload implementation
         httpd_resp_set_status(req, "201 Created");
         httpd_resp_sendstr(req, "File upload not fully implemented");
         return ESP_OK;
@@ -236,7 +236,7 @@ private:
         
         if (is_directory) {
             // Create directory
-            if (handler->sd_mmc_card_->make_directory(absolute_path)) {
+            if (handler->sd_mmc_card_->create_directory(absolute_path)) {
                 httpd_resp_set_status(req, "201 Created");
                 httpd_resp_sendstr(req, "Directory created");
                 return ESP_OK;
@@ -251,9 +251,11 @@ private:
             size_t new_name_len = httpd_req_get_hdr_value_len(req, "X-New-Name");
             if (new_name_len > 0) {
                 httpd_req_get_hdr_value_str(req, "X-New-Name", new_name, sizeof(new_name));
-                std::string new_path = Path::join(Path::parent_path(absolute_path), std::string(new_name));
+                std::string new_path = buildAbsolutePath(handler->root_path_, 
+                    getParentPath(relative_path) + "/" + std::string(new_name));
                 
-                if (handler->sd_mmc_card_->rename_file(absolute_path, new_path)) {
+                if (handler->sd_mmc_card_->copy_file(absolute_path, new_path)) {
+                    handler->sd_mmc_card_->delete_file(absolute_path);
                     httpd_resp_set_status(req, "200 OK");
                     httpd_resp_sendstr(req, "File renamed");
                     return ESP_OK;
@@ -273,28 +275,6 @@ private:
         if (suffix.size() > str.size()) return false;
         return std::equal(suffix.rbegin(), suffix.rend(), str.rbegin());
     }
-};
-
-class Box3Web {
-public:
-    Box3Web(web_server_base::WebServerBase *base) : base_(base), handler_(nullptr) {}
-
-    void setup() {
-        handler_ = new Box3WebHandler(sd_mmc_card_, root_path_, url_prefix_);
-        // Register handlers with the ESP-IDF HTTP server
-        handler_->registerHandlers(base_->get_server());
-    }
-
-    void set_url_prefix(std::string const &prefix) { url_prefix_ = prefix; }
-    void set_root_path(std::string const &path) { root_path_ = path; }
-    void set_sd_mmc_card(sd_mmc_card::SdMmc *card) { sd_mmc_card_ = card; }
-
-private:
-    web_server_base::WebServerBase *base_;
-    Box3WebHandler *handler_;
-    std::string url_prefix_ = "/files";
-    std::string root_path_;
-    sd_mmc_card::SdMmc *sd_mmc_card_;
 };
 
 } // namespace box3web
