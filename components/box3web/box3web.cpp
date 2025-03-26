@@ -60,7 +60,36 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
     }
     return path;
 }
+// Implémentation des setters manquants
+void Box3Web::set_sd_mmc_card(sd_mmc_card::SdMmc *card) {
+    sd_mmc_card_ = card;
+}
 
+void Box3Web::set_url_prefix(std::string const &prefix) {
+    url_prefix_ = prefix;
+}
+
+void Box3Web::set_root_path(std::string const &path) {
+    root_path_ = path;
+}
+
+void Box3Web::set_deletion_enabled(bool allow) {
+    deletion_enabled_ = allow;
+}
+
+void Box3Web::set_download_enabled(bool allow) {
+    download_enabled_ = allow;
+}
+
+void Box3Web::set_upload_enabled(bool allow) {
+    upload_enabled_ = allow;
+}
+
+// Handlers statiques
+esp_err_t Box3Web::http_get_handler(httpd_req_t *req) {
+    Box3Web* instance = static_cast<Box3Web*>(req->user_ctx);
+    return instance->handle_http_get(req);
+}
 // Implémentation Box3Web
 Box3Web::Box3Web(web_server_base::WebServerBase *base) : base_(base) {}
 
