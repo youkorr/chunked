@@ -9,13 +9,6 @@
 namespace esphome {
 namespace box3web {
 
-// Déclarations forward pour les wrappers
-namespace {
-esp_err_t http_get_handler_wrapper(httpd_req_t *req);
-esp_err_t http_delete_handler_wrapper(httpd_req_t *req);
-esp_err_t http_post_handler_wrapper(httpd_req_t *req);
-}  // namespace
-
 class Path {
  public:
   static const char separator = '/';
@@ -41,11 +34,6 @@ class Box3Web : public Component {
   void set_download_enabled(bool allow);
   void set_upload_enabled(bool allow);
 
-  // Déclarations friend pour les wrappers
-  friend esp_err_t ::http_get_handler_wrapper(httpd_req_t *req);
-  friend esp_err_t ::http_delete_handler_wrapper(httpd_req_t *req);
-  friend esp_err_t ::http_post_handler_wrapper(httpd_req_t *req);
-
  private:
   web_server_base::WebServerBase *base_{nullptr};
   sd_mmc_card::SdMmc *sd_mmc_card_{nullptr};
@@ -58,7 +46,12 @@ class Box3Web : public Component {
   bool download_enabled_{true};
   bool upload_enabled_{true};
 
-  // Méthodes pour esp_http_server
+  // Déclarations des handlers
+  static esp_err_t http_get_handler(httpd_req_t *req);
+  static esp_err_t http_delete_handler(httpd_req_t *req);
+  static esp_err_t http_post_handler(httpd_req_t *req);
+
+  // Méthodes internes
   esp_err_t handle_http_get(httpd_req_t *req);
   esp_err_t handle_http_delete(httpd_req_t *req);
   esp_err_t handle_http_post(httpd_req_t *req);
