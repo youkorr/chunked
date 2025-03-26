@@ -180,6 +180,49 @@ void Box3Web::handle_index(AsyncWebServerRequest *request, std::string const &pa
     // Send the response
     request->send(response);
 }
+void Box3Web::handle_download(AsyncWebServerRequest *request, const std::string &path) const {
+    FILE *file = fopen(path.c_str(), "rb");
+    if (!file) {
+        request->send(404, "text/plain", "File not found");
+        return;
+    }
+
+    AsyncWebServerResponse *response = request->beginChunkedResponse(
+        get_content_type(path).c_str(),
+        [file](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
+            size_t bytesRead = fread(buffer, 1, maxLen, file);
+            if (bytesRead == 0) {
+                fclose(file);  // Ferme le fichier une fois terminé
+            }
+            return bytesRead;
+        }
+    );
+
+    request->send(response);
+}
+void Box3Web::handle_upload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+    static FILE *file = nullptr;
+
+    if (index == 0) {  // Début du fichier
+        file = fopen(filename.c_str(), "wb");
+        if (!file) {
+            request->send(500, "text/plain", "Failed to open file for writing");
+            return;
+        }
+    }
+
+    if (file) {
+        fwrite(data, 1, len, file);
+    }
+
+    if (final) {  // Fin du fichier
+        if (file) {
+            fclose(file);
+            file = nullptr;
+        }
+        request->send(200, "text/plain", "Upload successful");
+    }
+}
 
 void Box3Web::write_row(AsyncResponseStream *response, sd_mmc_card::FileInfo const &info) const {
     response->printf("<tr><td>%s</td><td>%s</td><td>%s</td></tr>", 
@@ -188,13 +231,17 @@ void Box3Web::write_row(AsyncResponseStream *response, sd_mmc_card::FileInfo con
         info.is_directory ? "-" : std::to_string(info.size).c_str());
 }
 
-void Box3Web::handle_download(AsyncWebServerRequest *request, std::string const &path) const {
-    // Get content type based on file extension
-    String content_type = get_content_type(path);
-    
-    // Create file download response
-    request->send(sd_mmc_card_->open_file(path.c_str()), Path::file_name(path).c_str(), content_type);
+void Box3Web::handle_download(AsyncWebServerRequest *request, const std::string &path) const {
+    std::vector<uint8_t> file_content = sd_mmc_card_->read_file(path);
+
+    if (file_content.empty()) {
+        request->send(404, "text/plain", "File not found or empty");
+        return;
+    }
+
+    request->send_P(200, get_content_type(path).c_str(), reinterpret_cast<const char*>(file_content.data()), file_content.size());
 }
+
 
 void Box3Web::handle_delete(AsyncWebServerRequest *request) {
     // Extract the path from the URL
@@ -267,6 +314,17 @@ std::string Box3Web::build_prefix() const {
     if (prefix[0] != '/') prefix = "/" + prefix;
     if (prefix.back() == '/') prefix.pop_back();
     return prefix;
+}
+std::string Box3Web::get_content_type(const std::string &path) const {
+    if (path.ends_with(".html")) return "text/html";
+    if (path.ends_with(".css")) return "text/css";
+    if (path.ends_with(".js")) return "application/javascript";
+    if (path.ends_with(".png")) return "image/png";
+    if (path.ends_with(".jpg") || path.ends_with(".jpeg")) return "image/jpeg";
+    if (path.ends_with(".gif")) return "image/gif";
+    if (path.ends_with(".mp3")) return "audio/mpeg";
+    if (path.ends_with(".wav")) return "audio/wav";
+    return "application/octet-stream";  // Type générique par défaut
 }
 
 std::string Box3Web::extract_path_from_url(std::string const &url) const {
