@@ -46,22 +46,18 @@ class Box3Web : public Component {
   bool download_enabled_{true};
   bool upload_enabled_{true};
 
-  // Handlers ESP HTTP Server
-  static esp_err_t http_get_handler(httpd_req_t *req);
-  static esp_err_t http_delete_handler(httpd_req_t *req);
-  static esp_err_t http_upload_handler(httpd_req_t *req);
+  // Méthodes pour esp_http_server
+  esp_err_t handle_http_get(httpd_req_t *req);
+  esp_err_t handle_http_delete(httpd_req_t *req);
+  esp_err_t handle_http_post(httpd_req_t *req);
+  esp_err_t send_file_chunked(httpd_req_t *req, const std::string &path);
+  esp_err_t send_directory_listing(httpd_req_t *req, const std::string &path);
 
-  // Méthodes internes
   void register_handlers();
   std::string build_prefix() const;
   std::string extract_path_from_url(std::string const &url) const;
   std::string build_absolute_path(std::string relative_path) const;
   std::string get_content_type(const std::string &path) const;
-
-  // Gestion des réponses
-  esp_err_t send_directory_listing(httpd_req_t *req, const std::string &path);
-  esp_err_t send_file_chunked(httpd_req_t *req, const std::string &path);
-  esp_err_t handle_upload(httpd_req_t *req);
 
   const char *component_source_{nullptr};
 };
