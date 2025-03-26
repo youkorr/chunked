@@ -99,7 +99,7 @@ private:
         }
 
         // Handle directory listing
-        if (handler->sd_mmc_card_->is_directory(absolute_path)) {
+        if (handler->sd_mmc_card_->is_directory(absolute_path.c_str())) {
             return handleDirectoryListing(req, handler, absolute_path);
         }
 
@@ -127,7 +127,7 @@ private:
         html_start += path + "</h1><table><tr><th>Name</th><th>Type</th><th>Size</th></tr>";
         httpd_resp_sendstr_chunk(req, html_start.c_str());
 
-        auto entries = handler->sd_mmc_card_->list_directory_file_info(path, 0);
+        auto entries = handler->sd_mmc_card_->list_directory_file_info(path.c_str(), 0);
         for (const auto &entry : entries) {
             std::string row = "<tr><td>" + entry.path + "</td><td>" + 
                 (entry.is_directory ? "Directory" : "File") + "</td><td>" + 
@@ -203,19 +203,19 @@ private:
         std::string absolute_path = buildAbsolutePath(handler->root_path_, relative_path);
 
         // Check if path exists
-        if (!handler->sd_mmc_card_->exists(absolute_path)) {
+        if (!handler->sd_mmc_card_->exists(absolute_path.c_str())) {
             httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File not found");
             return ESP_FAIL;
         }
 
         // Prevent deleting directories
-        if (handler->sd_mmc_card_->is_directory(absolute_path)) {
+        if (handler->sd_mmc_card_->is_directory(absolute_path.c_str())) {
             httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Cannot delete directory");
             return ESP_FAIL;
         }
 
         // Attempt to delete file
-        if (!handler->sd_mmc_card_->delete_file(absolute_path)) {
+        if (!handler->sd_mmc_card_->delete_file(absolute_path.c_str())) {
             httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to delete file");
             return ESP_FAIL;
         }
@@ -236,7 +236,7 @@ private:
         
         if (is_directory) {
             // Create directory
-            if (handler->sd_mmc_card_->create_directory(absolute_path)) {
+            if (handler->sd_mmc_card_->create_directory(absolute_path.c_str())) {
                 httpd_resp_set_status(req, "201 Created");
                 httpd_resp_sendstr(req, "Directory created");
                 return ESP_OK;
@@ -254,12 +254,32 @@ private:
                 std::string new_path = buildAbsolutePath(handler->root_path_, 
                     getParentPath(relative_path) + "/" + std::string(new_name));
                 
-                if (handler->sd_mmc_card_->copy_file(absolute_path, new_path)) {
-                    handler->sd_mmc_card_->delete_file(absolute_path);
+                // Fallback: simulate copy and delete if SdMmc doesn't have copy_file
+                FILE *source = fopen(absolute_path.c_str(), "rb");
+                FILE *dest = fopen(new_path.c_str(), "wb");
+                
+                if (source && dest) {
+                    // Copy file contents
+                    char buffer[4096];
+                    size_t bytes_read;
+                    while ((bytes_read = fread(buffer, 1, sizeof(buffer), source)) > 0) {
+                        fwrite(buffer, 1, bytes_read, dest);
+                    }
+                    
+                    fclose(source);
+                    fclose(dest);
+                    
+                    // Delete original file
+                    handler->sd_mmc_card_->delete_file(absolute_path.c_str());
+                    
                     httpd_resp_set_status(req, "200 OK");
                     httpd_resp_sendstr(req, "File renamed");
                     return ESP_OK;
                 } else {
+                    // Close files if they were opened
+                    if (source) fclose(source);
+                    if (dest) fclose(dest);
+                    
                     httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to rename file");
                     return ESP_FAIL;
                 }
