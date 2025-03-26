@@ -167,11 +167,11 @@ void Box3Web::handle_download(AsyncWebServerRequest *request, const std::string 
     rewind(file);
 
     // Créer une réponse en streaming
-    auto response = request->beginResponseStream(get_content_type(path));
+    auto response = request->beginResponseStream(get_content_type(path).c_str());
     
     // Ajouter les en-têtes HTTP
-    response->addHeader("Content-Disposition", "attachment; filename=" + Path::file_name(path));
-    response->addHeader("Content-Length", std::to_string(file_size));
+    response->addHeader("Content-Disposition", ("attachment; filename=" + Path::file_name(path)).c_str());
+    response->addHeader("Content-Length", std::to_string(file_size).c_str());
 
     // Lire et envoyer le fichier par morceaux
     uint8_t buffer[1024];  
@@ -184,6 +184,7 @@ void Box3Web::handle_download(AsyncWebServerRequest *request, const std::string 
     fclose(file);
     request->send(response);
 }
+
 
 
 void Box3Web::handle_upload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data,
