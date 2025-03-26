@@ -9,7 +9,7 @@ namespace box3web {
 
 static const char *TAG = "box3web";
 
-// Path utility methods implementation
+// Implémentation des méthodes de la classe Path
 std::string Path::file_name(std::string const &path) {
     size_t last_separator = path.find_last_of(separator);
     return (last_separator != std::string::npos) ? path.substr(last_separator + 1) : path;
@@ -26,39 +26,29 @@ bool Path::trailing_slash(std::string const &path) {
 std::string Path::join(std::string const &first, std::string const &second) {
     if (first.empty()) return second;
     if (second.empty()) return first;
-    
-    // Remove trailing slash from first, then add separator and second
     std::string result = first;
     if (result.back() == separator) {
         result.pop_back();
     }
-    
-    // Add separator and second part
     result += separator;
     result += (second[0] == separator ? second.substr(1) : second);
-    
     return result;
 }
 
 std::string Path::remove_root_path(std::string path, std::string const &root) {
-    // Remove root path from the beginning of the path
     if (path.substr(0, root.length()) == root) {
         path = path.substr(root.length());
     }
-    
-    // Remove leading slash if present
     if (!path.empty() && path[0] == separator) {
         path = path.substr(1);
     }
-    
     return path;
 }
 
-// Box3Web implementation
+// Implémentation de la classe Box3Web
 Box3Web::Box3Web(web_server_base::WebServerBase *base) : base_(base) {}
 
 void Box3Web::setup() {
-    // Register the handler with the web server
     if (base_ && sd_mmc_card_) {
         base_->add_handler(this);
     } else {
@@ -100,17 +90,14 @@ void Box3Web::set_upload_enabled(bool allow) {
 }
 
 bool Box3Web::canHandle(AsyncWebServerRequest *request) {
-    // Check if the request URL starts with the configured prefix
     std::string url = request->url().c_str();
     return url.compare(0, url_prefix_.length(), url_prefix_) == 0;
 }
 
 void Box3Web::handleRequest(AsyncWebServerRequest *request) {
-    // Extract the path from the URL
     std::string url = request->url().c_str();
     std::string path = extract_path_from_url(url);
-    
-    // Route based on HTTP method
+
     switch (request->method()) {
         case HTTP_GET:
             handle_get(request);
@@ -129,57 +116,44 @@ void Box3Web::handleRequest(AsyncWebServerRequest *request) {
 }
 
 void Box3Web::handle_get(AsyncWebServerRequest *request) const {
-    // Extract the path from the URL
     std::string url = request->url().c_str();
     std::string path = extract_path_from_url(url);
-    
-    // Check if download is enabled
+
     if (!download_enabled_) {
         request->send(403, "text/plain", "Download not allowed");
         return;
     }
-    
-    // Build absolute path
+
     std::string absolute_path = build_absolute_path(path);
-    
-    // Check if path exists
     if (!sd_mmc_card_->exists(absolute_path.c_str())) {
         request->send(404, "text/plain", "File or directory not found");
         return;
     }
-    
-    // If it's a directory, show index
+
     if (sd_mmc_card_->is_directory(absolute_path.c_str())) {
         handle_index(request, absolute_path);
     } else {
-        // It's a file, download it
         handle_download(request, absolute_path);
     }
 }
 
 void Box3Web::handle_index(AsyncWebServerRequest *request, std::string const &path) const {
-    // Create an async response stream
     AsyncResponseStream *response = request->beginResponseStream("text/html");
-    
-    // HTML header
     response->printf("<!DOCTYPE html><html><head><title>Directory Listing</title>");
     response->printf("<style>body{font-family:Arial,sans-serif;} table{width:100%%;border-collapse:collapse;}</style>");
     response->printf("</head><body>");
     response->printf("<h1>Directory: %s</h1>", path.c_str());
     response->printf("<table border='1'><tr><th>Name</th><th>Type</th><th>Size</th></tr>");
-    
-    // List directory contents
+
     auto entries = sd_mmc_card_->list_directory_file_info(path.c_str(), 0);
     for (const auto &info : entries) {
         write_row(response, info);
     }
-    
-    // Close HTML
+
     response->printf("</table></body></html>");
-    
-    // Send the response
     request->send(response);
 }
+
 void Box3Web::handle_download(AsyncWebServerRequest *request, const std::string &path) const {
     FILE *file = fopen(path.c_str(), "rb");
     if (!file) {
@@ -187,23 +161,24 @@ void Box3Web::handle_download(AsyncWebServerRequest *request, const std::string 
         return;
     }
 
-    AsyncWebServerResponse *response = request->beginChunkedResponse(
-        get_content_type(path).c_str(),
+    AsyncWebServerResponse *response = request->beginResponse(
+        200, get_content_type(path).c_str(),
         [file](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
             size_t bytesRead = fread(buffer, 1, maxLen, file);
             if (bytesRead == 0) {
-                fclose(file);  // Ferme le fichier une fois terminé
+                fclose(file);
             }
             return bytesRead;
         }
     );
-
     request->send(response);
 }
-void Box3Web::handle_upload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+
+void Box3Web::handle_upload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data,
+                            size_t len, bool final) {
     static FILE *file = nullptr;
 
-    if (index == 0) {  // Début du fichier
+    if (index == 0) {
         file = fopen(filename.c_str(), "wb");
         if (!file) {
             request->send(500, "text/plain", "Failed to open file for writing");
@@ -215,7 +190,7 @@ void Box3Web::handle_upload(AsyncWebServerRequest *request, String filename, siz
         fwrite(data, 1, len, file);
     }
 
-    if (final) {  // Fin du fichier
+    if (final) {
         if (file) {
             fclose(file);
             file = nullptr;
@@ -225,45 +200,27 @@ void Box3Web::handle_upload(AsyncWebServerRequest *request, String filename, siz
 }
 
 void Box3Web::write_row(AsyncResponseStream *response, sd_mmc_card::FileInfo const &info) const {
-    response->printf("<tr><td>%s</td><td>%s</td><td>%s</td></tr>", 
-        info.path.c_str(), 
-        info.is_directory ? "Directory" : "File", 
-        info.is_directory ? "-" : std::to_string(info.size).c_str());
+    response->printf("<tr><td>%s</td><td>%s</td><td>%s</td></tr>",
+                     info.path.c_str(),
+                     info.is_directory ? "Directory" : "File",
+                     info.is_directory ? "-" : std::to_string(info.size).c_str());
 }
-
-void Box3Web::handle_download(AsyncWebServerRequest *request, const std::string &path) const {
-    std::vector<uint8_t> file_content = sd_mmc_card_->read_file(path);
-
-    if (file_content.empty()) {
-        request->send(404, "text/plain", "File not found or empty");
-        return;
-    }
-
-    request->send_P(200, get_content_type(path).c_str(), reinterpret_cast<const char*>(file_content.data()), file_content.size());
-}
-
 
 void Box3Web::handle_delete(AsyncWebServerRequest *request) {
-    // Extract the path from the URL
     std::string url = request->url().c_str();
     std::string path = extract_path_from_url(url);
-    
-    // Build absolute path
     std::string absolute_path = build_absolute_path(path);
-    
-    // Check if path exists
+
     if (!sd_mmc_card_->exists(absolute_path.c_str())) {
         request->send(404, "text/plain", "File not found");
         return;
     }
-    
-    // Prevent deleting directories
+
     if (sd_mmc_card_->is_directory(absolute_path.c_str())) {
         request->send(400, "text/plain", "Cannot delete directory");
         return;
     }
-    
-    // Attempt to delete
+
     if (sd_mmc_card_->delete_file(absolute_path.c_str())) {
         request->send(204, "text/plain", "File deleted");
     } else {
@@ -271,23 +228,7 @@ void Box3Web::handle_delete(AsyncWebServerRequest *request) {
     }
 }
 
-void Box3Web::handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data,
-                    size_t len, bool final) {
-    // Check if upload is enabled
-    if (!upload_enabled_) {
-        request->send(403, "text/plain", "Upload not allowed");
-        return;
-    }
-    
-    // TODO: Implement file upload logic
-    // This is a placeholder implementation
-    if (final) {
-        request->send(201, "text/plain", "File uploaded successfully");
-    }
-}
-
 String Box3Web::get_content_type(const std::string &path) const {
-    // Determine content type based on file extension
     if (path.find(".html") != std::string::npos) return "text/html";
     if (path.find(".css") != std::string::npos) return "text/css";
     if (path.find(".js") != std::string::npos) return "application/javascript";
@@ -308,46 +249,28 @@ String Box3Web::get_content_type(const std::string &path) const {
 }
 
 std::string Box3Web::build_prefix() const {
-    // Ensure prefix starts with a slash and doesn't end with one
     std::string prefix = url_prefix_;
     if (prefix.empty()) prefix = "box3web";
     if (prefix[0] != '/') prefix = "/" + prefix;
     if (prefix.back() == '/') prefix.pop_back();
     return prefix;
 }
-std::string Box3Web::get_content_type(const std::string &path) const {
-    if (path.ends_with(".html")) return "text/html";
-    if (path.ends_with(".css")) return "text/css";
-    if (path.ends_with(".js")) return "application/javascript";
-    if (path.ends_with(".png")) return "image/png";
-    if (path.ends_with(".jpg") || path.ends_with(".jpeg")) return "image/jpeg";
-    if (path.ends_with(".gif")) return "image/gif";
-    if (path.ends_with(".mp3")) return "audio/mpeg";
-    if (path.ends_with(".wav")) return "audio/wav";
-    return "application/octet-stream";  // Type générique par défaut
-}
 
 std::string Box3Web::extract_path_from_url(std::string const &url) const {
     std::string prefix = build_prefix();
-    
-    // Remove prefix from the URL
     if (url.compare(0, prefix.length(), prefix) == 0) {
         return url.substr(prefix.length());
     }
-    
     return url;
 }
 
 std::string Box3Web::build_absolute_path(std::string relative_path) const {
-    // Remove leading slash if present
     if (!relative_path.empty() && relative_path[0] == '/') {
         relative_path = relative_path.substr(1);
     }
-    
-    // Join root path with relative path
     return Path::join(root_path_, relative_path);
 }
 
-} // namespace box3web
-} // namespace esphome
+}  // namespace box3web
+}  // namespace esphome
 
