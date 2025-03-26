@@ -161,16 +161,24 @@ void Box3Web::handle_download(AsyncWebServerRequest *request, const std::string 
         return;
     }
 
-    AsyncWebServerResponse *response = request->beginResponse(
-        200, get_content_type(path).c_str(),
-        [file](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
-            size_t bytesRead = fread(buffer, 1, maxLen, file);
-            if (bytesRead == 0) {
-                fclose(file);
-            }
-            return bytesRead;
-        }
-    );
+    // Determine the file size
+    fseek(file, 0, SEEK_END);
+    size_t file_size = ftell(file);
+    rewind(file);
+
+    // Create an AsyncResponseStream
+    AsyncResponseStream *response = request->beginResponseStream(get_content_type(path).c_str());
+    response->addHeader("Content-Disposition", "attachment; filename=" + Path::file_name(path));
+    response->addHeader("Content-Length", std::to_string(file_size).c_str());
+
+    // Stream the file in chunks
+    uint8_t buffer[512];  // Buffer size (adjust as needed)
+    size_t bytesRead;
+    while ((bytesRead = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+        response->write(reinterpret_cast<const char *>(buffer), bytesRead);
+    }
+
+    fclose(file);
     request->send(response);
 }
 
