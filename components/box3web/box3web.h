@@ -35,16 +35,15 @@ class Box3Web : public Component, public AsyncWebHandler {  // Héritage de Comp
 
   bool canHandle(AsyncWebServerRequest *request) override;
   void handleRequest(AsyncWebServerRequest *request) override;
-
-  void handle_upload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data,
-                     size_t len, bool final);  // Correction de la signature
+  void handleUpload(AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data,
+                    size_t len, bool final) override;
 
  private:
   web_server_base::WebServerBase *base_{nullptr};
   sd_mmc_card::SdMmc *sd_mmc_card_{nullptr};
 
   std::string url_prefix_{"box3web"};
-  std::string root_path_{"/"};
+  std::string root_path_{"/sdcard"};
 
   bool deletion_enabled_{true};
   bool download_enabled_{true};
