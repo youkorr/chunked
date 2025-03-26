@@ -251,12 +251,13 @@ esp_err_t Box3Web::handle_http_post(httpd_req_t *req) {
 
     char buffer[2048];
     int received;
-    while ((received = httpd_req_recv(req, buffer, sizeof(buffer))) {
-        if (received < 0) {
-            fclose(file);
-            return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Upload failed");
-        }
+    while ((received = httpd_req_recv(req, buffer, sizeof(buffer))) > 0) {
         fwrite(buffer, 1, received, file);
+    }
+
+    if (received < 0) {
+        fclose(file);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Upload failed");
     }
 
     fclose(file);
