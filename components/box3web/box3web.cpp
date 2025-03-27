@@ -84,15 +84,7 @@ void Box3Web::setup() {
     // or a different approach to registering HTTP handlers
 }
 
-void Box3Web::dump_config() {
-    ESP_LOGCONFIG(TAG, "Box3Web:");
-    ESP_LOGCONFIG(TAG, "  Address: %s:%u", network::get_use_address().c_str(), this->base_->get_port());
-    ESP_LOGCONFIG(TAG, "  Url Prefix: %s", this->url_prefix_.c_str());
-    ESP_LOGCONFIG(TAG, "  Root Path: %s", this->root_path_.c_str());
-    ESP_LOGCONFIG(TAG, "  Deletion Enabled: %s", TRUEFALSE(this->deletion_enabled_));
-    ESP_LOGCONFIG(TAG, "  Download Enabled: %s", TRUEFALSE(this->download_enabled_));
-    ESP_LOGCONFIG(TAG, "  Upload Enabled: %s", TRUEFALSE(this->upload_enabled_));
-}
+
 String Box3Web::get_content_type(const std::string &path) const {
     if (endsWith(path, ".html")) return "text/html";
     else if (endsWith(path, ".css")) return "text/css";
