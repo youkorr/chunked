@@ -76,6 +76,7 @@ void Box3Web::setup() {
     
     ESP_LOGE(TAG, "Box3Web setup: HTTP server handler registration not implemented");
     
+    
     // Create handler with SD card, root path, and URL prefix
     handler_ = new Handler(sd_mmc_card_, root_path_, url_prefix_);
     
@@ -174,25 +175,6 @@ static std::string buildAbsolutePath(const std::string &root_path, const std::st
     return PathUtils::join(root_path, relative_path);
 }
 
-static std::string getContentType(const std::string &path) {
-    if (endsWith(path, ".html")) return "text/html";
-    else if (endsWith(path, ".css")) return "text/css";
-    else if (endsWith(path, ".js")) return "application/javascript";
-    else if (endsWith(path, ".json")) return "application/json";
-    else if (endsWith(path, ".png")) return "image/png";
-    else if (endsWith(path, ".jpg") || endsWith(path, ".jpeg")) return "image/jpeg";
-    else if (endsWith(path, ".gif")) return "image/gif";
-    else if (endsWith(path, ".svg")) return "image/svg+xml";
-    else if (endsWith(path, ".ico")) return "image/x-icon";
-    else if (endsWith(path, ".mp3")) return "audio/mpeg";
-    else if (endsWith(path, ".wav")) return "audio/wav";
-    else if (endsWith(path, ".mp4")) return "video/mp4";
-    else if (endsWith(path, ".pdf")) return "application/pdf";
-    else if (endsWith(path, ".zip")) return "application/zip";
-    else if (endsWith(path, ".txt")) return "text/plain";
-    else if (endsWith(path, ".xml")) return "application/xml";
-    return "application/octet-stream";
-}
 
 esp_err_t Box3Web::Handler::handleGet(httpd_req_t *req) {
     Handler *handler = static_cast<Handler*>(req->user_ctx);
