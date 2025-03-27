@@ -65,14 +65,23 @@ std::string PathUtils::parent_path(const std::string &path) {
 Box3Web::Box3Web(web_server_base::WebServerBase *base) : base_(base) {}
 
 void Box3Web::setup() {
-    // Get the HTTP server handle from the base web server
-    httpd_handle_t server = base_->get_server_raw();
+    // This is a placeholder. You'll need to modify this based on how 
+    // you can access the actual HTTP server handle in ESPHome
+    
+    // Alternative approaches:
+    // 1. Check if WebServerBase has a method to get the server handle
+    // 2. If not, you might need to modify the web server component 
+    //    to expose the HTTP server handle
+    // 3. Or create a separate method in WebServerBase to register this handler
+    
+    ESP_LOGE(TAG, "Box3Web setup: HTTP server handler registration not implemented");
     
     // Create handler with SD card, root path, and URL prefix
     handler_ = new Handler(sd_mmc_card_, root_path_, url_prefix_);
     
-    // Register handlers with the ESP-IDF HTTP server
-    handler_->registerHandlers(server);
+    // TODO: Implement proper handler registration
+    // This might require modifications to the WebServerBase class
+    // or a different approach to registering HTTP handlers
 }
 
 void Box3Web::dump_config() {
