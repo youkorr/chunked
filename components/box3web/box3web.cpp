@@ -232,12 +232,14 @@ private:
         std::string url = std::string(req->uri);
         std::string relative_path = url.substr(handler->url_prefix_.length());
         std::string absolute_path = buildAbsolutePath(handler->root_path_, relative_path);
-
+    
+        // Implement file/directory rename or create directory
         bool is_directory = relative_path.back() == '/';
         
         if (is_directory) {
             // Create directory
-            if (handler->sd_mmc_card_->create_directory(absolute_path)) {
+            // Convert std::string to const char* using c_str()
+            if (handler->sd_mmc_card_->create_directory(absolute_path.c_str())) {
                 httpd_resp_set_status(req, "201 Created");
                 httpd_resp_sendstr(req, "Directory created");
                 return ESP_OK;
@@ -247,16 +249,15 @@ private:
             }
         } else {
             // Rename file
+            // Extract new name from headers or request body
             char new_name[256];
             size_t new_name_len = httpd_req_get_hdr_value_len(req, "X-New-Name");
             if (new_name_len > 0) {
                 httpd_req_get_hdr_value_str(req, "X-New-Name", new_name, sizeof(new_name));
-                std::string new_path = getParentPath(absolute_path) + "/" + std::string(new_name);
+                std::string new_path = Path::join(Path::parent_path(absolute_path), std::string(new_name));
                 
-                // Use standard C++ rename function as a fallback
-                bool rename_success = (std::rename(absolute_path.c_str(), new_path.c_str()) == 0);
-                
-                if (rename_success) {
+                // Convert std::string to const char* using c_str()
+                if (handler->sd_mmc_card_->rename_file(absolute_path.c_str(), new_path.c_str())) {
                     httpd_resp_set_status(req, "200 OK");
                     httpd_resp_sendstr(req, "File renamed");
                     return ESP_OK;
@@ -266,15 +267,9 @@ private:
                 }
             }
         }
-
+    
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid rename request");
         return ESP_FAIL;
-    }
-
-    // Utility functions to check file extensions
-    static bool endsWith(const std::string &str, const std::string &suffix) {
-        if (suffix.size() > str.size()) return false;
-        return std::equal(suffix.rbegin(), suffix.rend(), str.rbegin());
     }
 };
 
