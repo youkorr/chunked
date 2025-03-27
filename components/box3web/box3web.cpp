@@ -86,8 +86,34 @@ void Box3Web::setup() {
 
 void Box3Web::dump_config() {
     ESP_LOGCONFIG(TAG, "Box3Web:");
-    ESP_LOGCONFIG(TAG, "  URL Prefix: %s", url_prefix_.c_str());
-    ESP_LOGCONFIG(TAG, "  Root Path: %s", root_path_.c_str());
+    ESP_LOGCONFIG(TAG, "  Address: %s:%u", network::get_use_address().c_str(), this->base_->get_port());
+    ESP_LOGCONFIG(TAG, "  Url Prefix: %s", this->url_prefix_.c_str());
+    ESP_LOGCONFIG(TAG, "  Root Path: %s", this->root_path_.c_str());
+    ESP_LOGCONFIG(TAG, "  Deletion Enabled: %s", TRUEFALSE(this->deletion_enabled_));
+    ESP_LOGCONFIG(TAG, "  Download Enabled: %s", TRUEFALSE(this->download_enabled_));
+    ESP_LOGCONFIG(TAG, "  Upload Enabled: %s", TRUEFALSE(this->upload_enabled_));
+}
+String Box3Web::get_content_type(const std::string &path) const {
+    if (endsWith(path, ".html")) return "text/html";
+    else if (endsWith(path, ".css")) return "text/css";
+    else if (endsWith(path, ".js")) return "application/javascript";
+    else if (endsWith(path, ".json")) return "application/json";
+    else if (endsWith(path, ".png")) return "image/png";
+    else if (endsWith(path, ".jpg") || endsWith(path, ".jpeg")) return "image/jpeg";
+    else if (endsWith(path, ".gif")) return "image/gif";
+    else if (endsWith(path, ".svg")) return "image/svg+xml";
+    else if (endsWith(path, ".ico")) return "image/x-icon";
+    else if (endsWith(path, ".mp3")) return "audio/mpeg";
+    else if (endsWith(path, ".wav")) return "audio/wav";
+    else if (endsWith(path, ".mp4")) return "video/mp4";
+    else if (endsWith(path, ".pdf")) return "application/pdf";
+    else if (endsWith(path, ".zip")) return "application/zip";
+    else if (endsWith(path, ".txt")) return "text/plain";
+    else if (endsWith(path, ".xml")) return "application/xml";
+    return "application/octet-stream";
+}
+bool Box3Web::canHandle(AsyncWebServerRequest *request) {
+    return str_startswith(std::string(request->url().c_str()), this->build_prefix());
 }
 
 void Box3Web::set_url_prefix(const std::string &prefix) { 
