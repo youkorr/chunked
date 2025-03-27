@@ -65,11 +65,14 @@ std::string PathUtils::parent_path(const std::string &path) {
 Box3Web::Box3Web(web_server_base::WebServerBase *base) : base_(base) {}
 
 void Box3Web::setup() {
+    // Get the HTTP server handle from the base web server
+    httpd_handle_t server = base_->get_server_raw();
+    
     // Create handler with SD card, root path, and URL prefix
     handler_ = new Handler(sd_mmc_card_, root_path_, url_prefix_);
     
     // Register handlers with the ESP-IDF HTTP server
-    handler_->registerHandlers(base_->get_server());
+    handler_->registerHandlers(server);
 }
 
 void Box3Web::dump_config() {
