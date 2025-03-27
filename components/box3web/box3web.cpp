@@ -9,23 +9,10 @@ namespace box3web {
 
 static const char *TAG = "box3web";
 
-// Handlers statiques
-esp_err_t Box3Web::http_get_handler(httpd_req_t *req) {
-    Box3Web* instance = static_cast<Box3Web*>(req->user_ctx);
-    return instance->handle_http_get(req);
-}
+// =============================================
+// Implémentation des méthodes de la classe Path
+// =============================================
 
-esp_err_t Box3Web::http_delete_handler(httpd_req_t *req) {
-    Box3Web* instance = static_cast<Box3Web*>(req->user_ctx);
-    return instance->handle_http_delete(req);
-}
-
-esp_err_t Box3Web::http_post_handler(httpd_req_t *req) {
-    Box3Web* instance = static_cast<Box3Web*>(req->user_ctx);
-    return instance->handle_http_post(req);
-}
-
-// Implémentation Path
 std::string Path::file_name(std::string const &path) {
     size_t pos = path.find_last_of(separator);
     return (pos != std::string::npos) ? path.substr(pos + 1) : path;
@@ -45,10 +32,7 @@ std::string Path::join(std::string const &first, std::string const &second) {
     
     std::string result = first;
     if (result.back() == separator) result.pop_back();
-    if (second.front() == separator) 
-        return result + second;
-    else
-        return result + separator + second;
+    return result + separator + (second[0] == separator ? second.substr(1) : second);
 }
 
 std::string Path::remove_root_path(std::string path, std::string const &root) {
@@ -60,38 +44,20 @@ std::string Path::remove_root_path(std::string path, std::string const &root) {
     }
     return path;
 }
-// Implémentation des setters manquants
-void Box3Web::set_sd_mmc_card(sd_mmc_card::SdMmc *card) {
-    sd_mmc_card_ = card;
-}
 
-void Box3Web::set_url_prefix(std::string const &prefix) {
-    url_prefix_ = prefix;
-}
+// ==============================================
+// Implémentation des méthodes de la classe Box3Web
+// ==============================================
 
-void Box3Web::set_root_path(std::string const &path) {
-    root_path_ = path;
-}
-
-void Box3Web::set_deletion_enabled(bool allow) {
-    deletion_enabled_ = allow;
-}
-
-void Box3Web::set_download_enabled(bool allow) {
-    download_enabled_ = allow;
-}
-
-void Box3Web::set_upload_enabled(bool allow) {
-    upload_enabled_ = allow;
-}
-
-// Handlers statiques
-esp_err_t Box3Web::http_get_handler(httpd_req_t *req) {
-    Box3Web* instance = static_cast<Box3Web*>(req->user_ctx);
-    return instance->handle_http_get(req);
-}
-// Implémentation Box3Web
 Box3Web::Box3Web(web_server_base::WebServerBase *base) : base_(base) {}
+
+// Setters
+void Box3Web::set_sd_mmc_card(sd_mmc_card::SdMmc *card) { sd_mmc_card_ = card; }
+void Box3Web::set_url_prefix(std::string const &prefix) { url_prefix_ = prefix; }
+void Box3Web::set_root_path(std::string const &path) { root_path_ = path; }
+void Box3Web::set_deletion_enabled(bool allow) { deletion_enabled_ = allow; }
+void Box3Web::set_download_enabled(bool allow) { download_enabled_ = allow; }
+void Box3Web::set_upload_enabled(bool allow) { upload_enabled_ = allow; }
 
 void Box3Web::setup() {
     if (!sd_mmc_card_) {
@@ -121,6 +87,22 @@ void Box3Web::dump_config() {
     ESP_LOGCONFIG(TAG, "  Deletion Enabled: %s", deletion_enabled_ ? "Yes" : "No");
     ESP_LOGCONFIG(TAG, "  Download Enabled: %s", download_enabled_ ? "Yes" : "No");
     ESP_LOGCONFIG(TAG, "  Upload Enabled: %s", upload_enabled_ ? "Yes" : "No");
+}
+
+// Handlers statiques
+esp_err_t Box3Web::http_get_handler(httpd_req_t *req) {
+    Box3Web* instance = static_cast<Box3Web*>(req->user_ctx);
+    return instance->handle_http_get(req);
+}
+
+esp_err_t Box3Web::http_delete_handler(httpd_req_t *req) {
+    Box3Web* instance = static_cast<Box3Web*>(req->user_ctx);
+    return instance->handle_http_delete(req);
+}
+
+esp_err_t Box3Web::http_post_handler(httpd_req_t *req) {
+    Box3Web* instance = static_cast<Box3Web*>(req->user_ctx);
+    return instance->handle_http_post(req);
 }
 
 void Box3Web::register_handlers() {
@@ -158,6 +140,7 @@ void Box3Web::register_handlers() {
     }
 }
 
+// Méthodes de gestion des requêtes
 esp_err_t Box3Web::handle_http_get(httpd_req_t *req) {
     if (!download_enabled_) {
         return httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "Downloads disabled");
@@ -179,13 +162,18 @@ esp_err_t Box3Web::send_file_chunked(httpd_req_t *req, const std::string &path) 
         return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File not found");
     }
 
-    // Set headers
+    // Déterminer la taille du fichier
+    fseek(file, 0, SEEK_END);
+    size_t file_size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    // Configurer les en-têtes
     httpd_resp_set_type(req, get_content_type(path).c_str());
     httpd_resp_set_hdr(req, "Content-Disposition", 
                       ("inline; filename=\"" + Path::file_name(path) + "\"").c_str());
     httpd_resp_set_hdr(req, "Accept-Ranges", "bytes");
 
-    // Send file in chunks
+    // Envoyer le fichier par morceaux
     const size_t chunk_size = 4096;
     std::vector<uint8_t> buffer(chunk_size);
     esp_err_t ret = ESP_OK;
@@ -209,18 +197,25 @@ esp_err_t Box3Web::send_file_chunked(httpd_req_t *req, const std::string &path) 
 esp_err_t Box3Web::send_directory_listing(httpd_req_t *req, const std::string &path) {
     httpd_resp_set_type(req, "text/html");
     
-    // Header
+    // En-tête HTML
     const char* header_fmt = R"(<!DOCTYPE html><html><head>
     <title>Directory: %s</title>
-    <style>body{font-family:Arial,sans-serif}table{width:100%%;border-collapse:collapse}</style>
-    </head><body><h1>Directory: %s</h1><table border='1'>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { width: 100%%; border-collapse: collapse; }
+        th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
+        tr:hover { background-color: #f5f5f5; }
+    </style>
+    </head><body>
+    <h1>Directory: %s</h1>
+    <table>
     <tr><th>Name</th><th>Type</th><th>Size</th></tr>)";
 
     char header[1024];
     snprintf(header, sizeof(header), header_fmt, path.c_str(), path.c_str());
     httpd_resp_send_chunk(req, header, strlen(header));
 
-    // Content
+    // Contenu du répertoire
     auto entries = sd_mmc_card_->list_directory_file_info(path.c_str(), 0);
     for (const auto& entry : entries) {
         char row[512];
@@ -234,7 +229,7 @@ esp_err_t Box3Web::send_directory_listing(httpd_req_t *req, const std::string &p
         httpd_resp_send_chunk(req, row, strlen(row));
     }
 
-    // Footer
+    // Pied de page
     const char* footer = "</table></body></html>";
     httpd_resp_send_chunk(req, footer, strlen(footer));
     httpd_resp_send_chunk(req, NULL, 0);
@@ -293,6 +288,7 @@ esp_err_t Box3Web::handle_http_post(httpd_req_t *req) {
     return httpd_resp_sendstr(req, "Upload successful");
 }
 
+// Méthodes utilitaires
 std::string Box3Web::build_prefix() const {
     std::string prefix = url_prefix_;
     if (prefix.empty()) prefix = "box3web";
