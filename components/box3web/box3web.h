@@ -21,7 +21,7 @@ public:
     static std::string parent_path(const std::string &path);
 };
 
-class Box3Web : public Component {  // Removed AsyncWebHandler for ESP-IDF HTTP server
+class Box3Web : public Component {
 public:
     Box3Web(web_server_base::WebServerBase *base);
     void setup() override;
@@ -52,13 +52,11 @@ private:
         sd_mmc_card::SdMmc *sd_mmc_card_;
         std::string root_path_;
         std::string url_prefix_;
-
         static esp_err_t handleGet(httpd_req_t *req);
         static esp_err_t handlePost(httpd_req_t *req);
         static esp_err_t handlePut(httpd_req_t *req);
         static esp_err_t handleDelete(httpd_req_t *req);
     };
-
     Handler *handler_{nullptr};
 };
 
